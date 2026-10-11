@@ -13,8 +13,8 @@ are easy to compare. Whether the family will like living there is much harder to
 and it matters most to spouses and children, who did not choose the move.
 
 A general chatbot can list popular neighborhoods near Fort Bragg. It cannot tell a family that likes
-Texas barbecue, George Strait and hiking which part of Fayetteville has the most people with the same
-tastes. Qloo's taste data can.
+Texas barbecue, George Strait and hiking which part of Fayetteville draws people with the same tastes.
+Qloo's taste data can.
 
 ## What it does
 
