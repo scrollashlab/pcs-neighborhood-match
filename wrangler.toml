@@ -1,0 +1,16 @@
+name = "pcs-neighborhood-match"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[ai]
+binding = "AI"
+
+[observability]
+enabled = true
+
+# The Qloo key is a secret, never committed:
+#   npx wrangler secret put QLOO_API_KEY

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PCS Neighborhood Match: find your place at the next duty station</title>
+  <meta name="description" content="Moving to a new base? Tell us what your family loves back home. A Qloo-powered agent finds the neighborhoods, first-week spots and weekend trips that fit you.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%231f4e79%27/%3E%3Cpath d=%27M16 6l3 7h7l-5.5 4.5 2 7.5L16 20.5 9.5 25l2-7.5L6 13h7z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">For military families on PCS orders</p>
+      <h1>PCS Neighborhood Match</h1>
+      <p class="lede">You have a few weeks to pick a neighborhood in a town you've never seen. Tell us what your family loves back home. The agent uses the Qloo taste graph to show where people like you live near your new base, and where to eat, go and drive on your first weekends.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form id="kit-form" class="card" autocomplete="off">
+      <div class="grid two">
+        <label>Moving to
+          <select id="stationId" name="stationId">
+            <option value="">Choose a duty station…</option>
+          </select>
+        </label>
+        <label>…or type the city
+          <input id="otherCity" name="otherCity" placeholder="e.g. Fayetteville, North Carolina" maxlength="80">
+        </label>
+      </div>
+      <label>Where you live now <span class="hint">(helps match the places you name)</span>
+        <input id="homeCity" name="homeCity" placeholder="e.g. San Antonio, Texas" maxlength="80">
+      </label>
+      <label>Places you'll miss <span class="hint">restaurants, coffee, bars, shops, venues</span>
+        <textarea id="places" name="places" rows="2" maxlength="400" placeholder="e.g. Rudy's BBQ, Halcyon coffee, the Pearl farmers market"></textarea>
+      </label>
+      <div class="grid two">
+        <label>Music you play in the car
+          <textarea id="music" name="music" rows="2" maxlength="400" placeholder="e.g. Zach Bryan, Tejano, The Avett Brothers"></textarea>
+        </label>
+        <label>Shows and movies you rewatch
+          <textarea id="screen" name="screen" rows="2" maxlength="400" placeholder="e.g. Ted Lasso, Bluey, Top Gun: Maverick"></textarea>
+        </label>
+      </div>
+      <div class="grid two">
+        <label>Books and podcasts
+          <textarea id="reading" name="reading" rows="2" maxlength="400" placeholder="e.g. Jocko Podcast, Where the Crawdads Sing"></textarea>
+        </label>
+        <label>What you do on weekends
+          <textarea id="activities" name="activities" rows="2" maxlength="400" placeholder="e.g. hiking, craft beer, live music, beach days"></textarea>
+        </label>
+      </div>
+      <div class="grid two">
+        <label>Kids
+          <select id="kids" name="kids">
+            <option value="none">No kids at home</option>
+            <option value="young">Young kids</option>
+            <option value="teens">Teens</option>
+            <option value="both">Young kids and teens</option>
+          </select>
+        </label>
+        <label>Eating-out budget
+          <select id="budget" name="budget">
+            <option value="1">$ — keep it cheap</option>
+            <option value="2">$$ — everyday</option>
+            <option value="3" selected>$$$ — treat ourselves sometimes</option>
+            <option value="4">$$$$ — no limit</option>
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit" id="go">Build our welcome kit</button>
+        <button type="button" id="example" class="ghost">Fill in an example family</button>
+      </div>
+      <p class="privacy">Nothing you type is stored. No accounts, no names, no addresses.</p>
+    </form>
+
+    <section id="status" class="status" hidden aria-live="polite"></section>
+
+    <section id="result" hidden>
+      <div class="card">
+        <h2 id="headline"></h2>
+        <p id="summary" class="lede-sm"></p>
+        <div class="toolbar"><button type="button" id="print" class="ghost">Print or save as PDF</button></div>
+      </div>
+
+      <div class="card">
+        <h3>Where people with your taste live</h3>
+        <p class="hint">Areas around your new base ranked by how strongly they match your family's favorites in Qloo's taste graph.</p>
+        <div id="map" role="img" aria-label="Map of the best-matching areas"></div>
+        <ol id="areas" class="items"></ol>
+      </div>
+
+      <div class="card"><h3>Your first week</h3><ul id="first_week" class="items"></ul></div>
+      <div class="card" id="kids-card" hidden><h3>For the kids</h3><ul id="kids_list" class="items"></ul></div>
+      <div class="card"><h3>Weekend trips</h3><ul id="weekend" class="items"></ul></div>
+      <div class="card"><h3>Common ground with your new neighbors</h3>
+        <p class="hint">Local favorites that your family is likely to enjoy too: easy small talk at the unit, the school pickup line or the FRG.</p>
+        <ul id="common_ground" class="items"></ul>
+      </div>
+
+      <details class="card trace">
+        <summary>How the agent built this</summary>
+        <ol id="trace"></ol>
+        <h4>How your favorites matched in Qloo</h4>
+        <ul id="matches" class="matches"></ul>
+        <p id="stats" class="hint"></p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Recommendations are powered by the <a href="https://www.qloo.com/" rel="noopener">Qloo</a> taste graph. Map data © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors. Always visit a neighborhood, and talk to your installation housing office, before you sign a lease.</p>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
