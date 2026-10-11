@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PCS Neighborhood Match: find your place at the next duty station</title>
-  <meta name="description" content="Moving to a new base? Tell us what your family loves back home. A Qloo-powered agent finds the neighborhoods, first-week spots and weekend trips that fit you.">
+  <title>PCS Neighborhood Match</title>
+  <meta name="description" content="For military families moving to a new base. Tell us what your family likes at home, and an agent uses Qloo to suggest neighborhoods and places near the new base that fit.">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%231f4e79%27/%3E%3Cpath d=%27M16 6l3 7h7l-5.5 4.5 2 7.5L16 20.5 9.5 25l2-7.5L6 13h7z%27 fill=%27%23fff%27/%3E%3C/svg%3E">
@@ -14,7 +14,7 @@
     <div class="wrap">
       <p class="eyebrow">For military families on PCS orders</p>
       <h1>PCS Neighborhood Match</h1>
-      <p class="lede">You have a few weeks to pick a neighborhood in a town you've never seen. Tell us what your family loves back home. The agent uses the Qloo taste graph to show where people like you live near your new base, and where to eat, go and drive on your first weekends.</p>
+      <p class="lede">You have a few weeks to pick a neighborhood in a town you've never seen. Tell us what your family loves back home. The agent uses the Qloo taste graph to show which areas near your new base match your taste, and which places and weekend trips to try first.</p>
     </div>
   </header>
 
@@ -63,10 +63,10 @@
         </label>
         <label>Eating-out budget
           <select id="budget" name="budget">
-            <option value="1">$ — keep it cheap</option>
-            <option value="2">$$ — everyday</option>
-            <option value="3" selected>$$$ — treat ourselves sometimes</option>
-            <option value="4">$$$$ — no limit</option>
+            <option value="1">$ (keep it cheap)</option>
+            <option value="2">$$ (everyday)</option>
+            <option value="3" selected>$$$ (a treat now and then)</option>
+            <option value="4">$$$$ (no limit)</option>
           </select>
         </label>
       </div>
@@ -74,7 +74,7 @@
         <button type="submit" id="go">Build our welcome kit</button>
         <button type="button" id="example" class="ghost">Fill in an example family</button>
       </div>
-      <p class="privacy">Nothing you type is stored. No accounts, no names, no addresses.</p>
+      <p class="privacy">Your answers are used to build this kit and are not saved. There are no accounts, and we never ask for your name or address.</p>
     </form>
 
     <section id="status" class="status" hidden aria-live="polite"></section>
@@ -97,7 +97,7 @@
       <div class="card" id="kids-card" hidden><h3>For the kids</h3><ul id="kids_list" class="items"></ul></div>
       <div class="card"><h3>Weekend trips</h3><ul id="weekend" class="items"></ul></div>
       <div class="card"><h3>Common ground with your new neighbors</h3>
-        <p class="hint">Local favorites that your family is likely to enjoy too: easy small talk at the unit, the school pickup line or the FRG.</p>
+        <p class="hint">Artists and shows that are popular here and close to your taste. They make easy small talk at work or at school pickup.</p>
         <ul id="common_ground" class="items"></ul>
       </div>
 
@@ -112,7 +112,7 @@
   </main>
 
   <footer class="wrap foot">
-    <p>Recommendations are powered by the <a href="https://www.qloo.com/" rel="noopener">Qloo</a> taste graph. Map data © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors. Always visit a neighborhood, and talk to your installation housing office, before you sign a lease.</p>
+    <p>Recommendations come from the <a href="https://www.qloo.com/" rel="noopener">Qloo</a> taste graph. Map data © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> contributors. Always visit a neighborhood, and talk to your installation housing office, before you sign a lease.</p>
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

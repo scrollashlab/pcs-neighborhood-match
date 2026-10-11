@@ -134,7 +134,8 @@ function defaultPlan({ favorites, tags }) {
 const BRIEF_SYSTEM = `You write the welcome kit for a military family arriving at a new duty station.
 Use ONLY the items in the input. Every "id" you output must be copied from the input.
 Each "why" is one plain sentence that names the family favorite that drove the match when "because" is given.
-No invented places, no prices, no hours, no claims about schools or safety. Warm, practical, brief.
+No invented places, no prices, no hours, no claims about schools or safety.
+Write short, plain sentences. Do not use dashes as punctuation, exclamation marks or sales language.
 Return JSON only:
 {"headline":string,
  "summary":string,                                  // 2 sentences
@@ -159,6 +160,17 @@ function compactForBrief(facts) {
   };
 }
 
+// Model text is shown to families. Replace dash punctuation with commas and drop
+// exclamation marks so the kit reads like plain notes.
+export function plain(text) {
+  return String(text || "")
+    .replace(/\s*[\u2014\u2013]\s*/g, ", ")
+    .replace(/\s+--\s+/g, ", ")
+    .replace(/!+/g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export function validateKit(kit, facts) {
   const known = (list, key = "id") => new Map(list.map((x) => [x[key], x]));
   const areaMap = known(facts.areas, "geohash");
@@ -172,10 +184,10 @@ export function validateKit(kit, facts) {
     (Array.isArray(arr) ? arr : [])
       .filter((x) => x && map.has(x.id))
       .slice(0, n)
-      .map((x) => ({ ...map.get(x.id), why: String(x.why || "").slice(0, 280) }));
+      .map((x) => ({ ...map.get(x.id), why: plain(x.why).slice(0, 280) }));
   const out = {
-    headline: String(kit.headline || "").slice(0, 120),
-    summary: String(kit.summary || "").slice(0, 500),
+    headline: plain(kit.headline).slice(0, 120),
+    summary: plain(kit.summary).slice(0, 500),
     areas: clean(kit.areas, areaMap, 4),
     first_week: clean(kit.first_week, sections.first_week, 6),
     kids: clean(kit.kids, sections.kids, 4),
@@ -201,15 +213,15 @@ export function templateKit(facts) {
   const dest = facts.destination.label;
   return {
     headline: `Your taste map for ${dest}`,
-    summary: `These picks come from the Qloo taste graph, matched to what your family already loves. Start with the areas that fit you best, then use the first-week list to feel at home fast.`,
+    summary: `These picks come from the Qloo taste graph and are based on the favorites you entered. Start with the best-matching areas, then try a few places from the first-week list.`,
     areas: facts.areas.map((a) => ({
       ...a,
       why: `Strong taste match (${Math.round((a.affinity ?? 0) * 100)}%) for your favorites${a.places.length ? `, near spots like ${a.places.slice(0, 2).map((p) => p.name).join(" and ")}` : ""}.`,
     })),
     first_week: facts.firstWeek.slice(0, 6).map((e) => ({ ...e, why: why(e, "A close match to your family's taste in this area.") })),
-    kids: facts.kidsPlaces.slice(0, 4).map((e) => ({ ...e, why: why(e, "Family-friendly and a good fit for your taste.") })),
+    kids: facts.kidsPlaces.slice(0, 4).map((e) => ({ ...e, why: why(e, "Good for families and close to your taste.") })),
     weekend: facts.weekend.slice(0, 3).map((e) => ({ ...e, why: why(e, "A weekend trip that fits what you enjoy.") })),
-    common_ground: facts.commonGround.slice(0, 4).map((e) => ({ ...e, why: why(e, "Loved locally and a fit for your taste: an easy conversation starter.") })),
+    common_ground: facts.commonGround.slice(0, 4).map((e) => ({ ...e, why: why(e, "Popular here and close to your taste. Good for small talk with new neighbors.") })),
   };
 }
 

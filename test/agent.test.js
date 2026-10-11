@@ -130,3 +130,9 @@ test("free-text city works when no preset is chosen", async () => {
   const out = await runAgent({ ...FORM, stationId: "", otherCity: "Dothan, Alabama" }, { qloo: client(), llm: null });
   assert.equal(out.destination.locality, "Dothan, Alabama");
 });
+
+test("model text is cleaned of dash punctuation and exclamation marks", async () => {
+  const { plain } = await import("../src/agent.js");
+  assert.equal(plain("Great tacos \u2014 near the gate!"), "Great tacos, near the gate.");
+  assert.equal(plain("Quiet streets \u2013 good parks"), "Quiet streets, good parks");
+});

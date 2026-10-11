@@ -131,7 +131,7 @@ function render(data) {
   trace.replaceChildren(...data.trace.map((t) => el("li", {}, el("strong", { textContent: `${t.step} ` }), `${t.detail} `, el("span", { className: "meta", textContent: `(${(t.ms / 1000).toFixed(1)} s)` }))));
   const matches = $("matches");
   matches.replaceChildren(
-    ...data.favorites.map((f) => el("li", { textContent: f.matched ? `${f.typed} → ${f.matched}` : `${f.typed} → no match` })),
+    ...data.favorites.map((f) => el("li", { textContent: f.matched ? `${f.typed}: matched to ${f.matched}` : `${f.typed}: no match` })),
   );
   $("stats").textContent = `${data.stats.qlooCalls} Qloo calls, ${data.stats.llmSteps} model steps, ${(data.stats.ms / 1000).toFixed(1)} s${data.cached ? " (cached)" : ""}.`;
 

@@ -1,6 +1,6 @@
 // The tools the agent can call. Each tool talks to Qloo and returns compact,
 // JSON-safe results. Every entity that reaches the final kit comes from here,
-// which is how the app guarantees it never recommends a place Qloo didn't return.
+// so the app never recommends a place that Qloo didn't return.
 
 const KIND_TO_TYPE = {
   place: "urn:entity:place",
@@ -140,8 +140,8 @@ function pick(e) {
   };
 }
 
-// Group heatmap cells into ~5 km areas and rank by mean affinity, lightly
-// weighted toward places that are actually lived in (popularity).
+// Group heatmap cells into areas of about 5 km and rank them by mean affinity,
+// with a small boost for popularity so busier areas rank a little higher.
 export function rankAreas(cells, limit = 4) {
   const groups = new Map();
   for (const c of cells || []) {

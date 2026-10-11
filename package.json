@@ -2,7 +2,7 @@
   "name": "pcs-neighborhood-match",
   "version": "1.0.0",
   "private": true,
-  "description": "A Qloo-powered agent that helps military families moving to a new duty station find where to live and what to do, matched to what they already love.",
+  "description": "An agent that uses Qloo to suggest neighborhoods and places near a new duty station that fit a military family's tastes.",
   "type": "module",
   "license": "MIT",
   "scripts": {
