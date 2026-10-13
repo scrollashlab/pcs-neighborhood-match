@@ -143,6 +143,13 @@ function listOf(body) {
 export function normalizeEntity(e = {}) {
   const p = e.properties || {};
   const loc = e.location || {};
+  const ancestors = (p.ancestors || []).map((a) => ({
+    id: a.entity_id || a.id || null,
+    name: a.name || null,
+    abbreviation: a.abbreviation || null,
+    place: a.place || null,
+    adminLevel: a.admin_level ?? null,
+  }));
   return {
     id: e.entity_id || e.id,
     name: e.name,
@@ -158,6 +165,8 @@ export function normalizeEntity(e = {}) {
     lat: loc.lat ?? loc.latitude ?? null,
     lon: loc.lon ?? loc.lng ?? loc.longitude ?? null,
     geohash: loc.geohash || e.geohash || null,
+    placeKind: p.place || null,
+    ancestors,
     tags: (e.tags || []).slice(0, 8).map((t) => ({ id: t.id || t.tag_id, name: t.name })),
     affinity: e.query?.affinity ?? null,
     explain: parseExplainability(e.query?.explainability),

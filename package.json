@@ -9,7 +9,8 @@
     "test": "node --test test/*.test.js",
     "preview:mock": "node scripts/mock-preview.js",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "smoke:live": "node scripts/live-smoke.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

@@ -275,11 +275,16 @@ export async function runAgent(rawInput, { qloo, llm }) {
   const interestQueries = [...profile.interests];
   if (profile.kids) interestQueries.push("family friendly");
   const [favorites, tags] = await Promise.all([
-    tools.resolve_favorites({ items: profile.favorites, nearLocalityId: home?.id }),
+    tools.resolve_favorites({ items: profile.favorites, nearLocality: home }),
     tools.find_tags({ queries: interestQueries }),
   ]);
   const resolvedCount = favorites.filter((f) => f.id).length;
-  log("ground", `Qloo resolved ${resolvedCount} of ${favorites.length} favorites and ${tags.length} interest tags${home ? ` (place search centered on ${home.name})` : ""}.`);
+  const homeNote = home?.lat != null
+    ? ` (place search centered on ${home.name} at ${Number(home.lat).toFixed(2)},${Number(home.lon).toFixed(2)})`
+    : home
+      ? ` (home locality ${home.name} had no coordinates)`
+      : "";
+  log("ground", `Qloo resolved ${resolvedCount} of ${favorites.length} favorites and ${tags.length} interest tags${homeNote}.`);
   if (!resolvedCount && !tags.length) {
     throw new UserError("Qloo couldn't match any of those favorites. Try full names, like a band name or a restaurant with its city.");
   }

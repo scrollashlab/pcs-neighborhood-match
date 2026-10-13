@@ -11,13 +11,76 @@ export function fakeFetch({ emptyFirstHeatmap = false, log = [] } = {}) {
 
     if (u.pathname === "/search") {
       const q = p.get("query");
-      if (p.get("types") === "urn:entity:locality") return ok({ results: [{ entity_id: "LOC-HOME", name: q }] });
+      if (p.get("types") === "urn:entity:locality") {
+        // First hit deliberately wrong-country; second is the real US city — mirrors live API.
+        return ok({
+          results: [
+            {
+              entity_id: "LOC-WRONG",
+              name: `${q} (wrong country)`,
+              subtype: "urn:entity:locality",
+              location: { lat: 20.98, lon: -101.49 },
+              properties: {
+                place: "quarter",
+                ancestors: [
+                  { name: "Guanajuato", place: "state", abbreviation: "Gto.", admin_level: 4 },
+                  { name: "México", place: "country", admin_level: 2 },
+                ],
+              },
+            },
+            {
+              entity_id: "LOC-HOME",
+              name: q.replace(/,.*/, "").trim() || q,
+              subtype: "urn:entity:locality",
+              location: { lat: 29.42, lon: -98.49 },
+              properties: {
+                place: "city",
+                ancestors: [
+                  { name: "Texas", place: "state", abbreviation: "Tex.", admin_level: 4 },
+                  { name: "United States of America", place: "country", abbreviation: "USA", admin_level: 2 },
+                ],
+              },
+            },
+          ],
+        });
+      }
       if (q === "Nothing Matches") return ok({ results: [] });
-      return ok({ results: [{ entity_id: `ENT-${slug(q)}`, name: `${q} (matched)`, subtype: p.get("types") || "urn:entity:artist" }] });
+      const loc = p.get("filter.location");
+      const subtype = p.get("types") || "urn:entity:artist";
+      const nearHome = loc && loc.startsWith("29.");
+      const name = nearHome && subtype === "urn:entity:place"
+        ? `${q} (San Antonio)`
+        : `${q} (matched)`;
+      return ok({
+        results: [
+          {
+            entity_id: `ENT-${slug(q)}`,
+            name,
+            subtype,
+            location: nearHome ? { lat: 29.55, lon: -98.5 } : { lat: 41.48, lon: -87.05 },
+            properties: { address: "100 Main St", geocode: { city: nearHome ? "San Antonio" : "Valparaiso" } },
+          },
+          {
+            entity_id: `ENT-${slug(q)}-ALT`,
+            name: `${q} Alternate`,
+            subtype,
+            location: { lat: 33.37, lon: -112.31 },
+            properties: { address: "200 Other St", geocode: { city: "Avondale" } },
+          },
+        ],
+      });
     }
     if (u.pathname === "/v2/tags") {
       const q = p.get("filter.query");
-      return ok({ results: { tags: [{ id: `urn:tag:test:${slug(q)}`, name: q, type: "urn:tag:test" }] } });
+      // Include a distractor tag so tagMatchScore has something to reject.
+      return ok({
+        results: {
+          tags: [
+            { id: `urn:tag:test:other`, name: "Dining", type: "urn:tag:test" },
+            { id: `urn:tag:test:${slug(q)}`, name: q, type: "urn:tag:test" },
+          ],
+        },
+      });
     }
     if (u.pathname === "/v2/insights") {
       const type = p.get("filter.type");

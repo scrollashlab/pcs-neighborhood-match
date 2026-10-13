@@ -1,3 +1,11 @@
+import {
+  entityMatchScore,
+  formatLatLon,
+  localityScore,
+  pickBest,
+  tagMatchScore,
+} from "./grounding.js";
+
 // The tools the agent can call. Each tool talks to Qloo and returns compact,
 // JSON-safe results. Every entity that reaches the final kit comes from here,
 // so the app never recommends a place that Qloo didn't return.
@@ -28,23 +36,45 @@ const AREA_PRECISION = 5;
 export function makeTools(qloo) {
   return {
     async resolve_locality({ name }) {
-      const hits = await qloo.search(name, { types: "urn:entity:locality", take: 1 });
-      return hits[0] ? { id: hits[0].id, name: hits[0].name } : null;
+      // Take several hits: the first name match is sometimes the wrong country
+      // (live 2026-10-13: "San Antonio, Texas" -> Guanajuato before Bexar County).
+      const hits = await qloo.search(name, { types: "urn:entity:locality", take: 5 });
+      const best = pickBest(hits, (h) => localityScore(name, h), { minScore: 0.4 });
+      if (!best) return null;
+      const h = best.item;
+      return {
+        id: h.id,
+        name: h.name,
+        lat: h.lat,
+        lon: h.lon,
+        placeKind: h.placeKind || null,
+        score: Math.round(best.score * 1000) / 1000,
+      };
     },
 
-    async resolve_favorites({ items, nearLocalityId }) {
+    async resolve_favorites({ items, nearLocality }) {
+      // /search filter.location must be "lat,lon" (not an entity id). Radius is miles.
+      const near = nearLocality && nearLocality.lat != null ? nearLocality : null;
+      const loc = near ? formatLatLon(near.lat, near.lon) : null;
       const resolved = await Promise.all(
         (items || []).slice(0, 12).map(async (it) => {
           const type = typeForKind(it.kind);
-          const opts = { types: type || undefined, take: 1 };
-          if (type === "urn:entity:place" && nearLocalityId) opts.location = nearLocalityId;
+          const base = { types: type || undefined, take: 5 };
           try {
-            const [hit] = await qloo.search(it.name, opts);
-            if (!hit && opts.location) {
-              const [loose] = await qloo.search(it.name, { types: type || undefined, take: 1 });
-              return loose ? { input: it.name, kind: it.kind, ...pick(loose) } : { input: it.name, kind: it.kind, id: null };
+            let hits = [];
+            if (type === "urn:entity:place" && loc) {
+              hits = await qloo.search(it.name, { ...base, location: loc, radiusMiles: 40 });
             }
-            return hit ? { input: it.name, kind: it.kind, ...pick(hit) } : { input: it.name, kind: it.kind, id: null };
+            if (!hits.length) {
+              hits = await qloo.search(it.name, base);
+            }
+            const best = pickBest(
+              hits,
+              (h) => entityMatchScore(it.name, h, { nearLat: near?.lat, nearLon: near?.lon }),
+              { minScore: 0.34 },
+            );
+            if (!best) return { input: it.name, kind: it.kind, id: null };
+            return { input: it.name, kind: it.kind, matchScore: Math.round(best.score * 1000) / 1000, ...pick(best.item) };
           } catch {
             return { input: it.name, kind: it.kind, id: null };
           }
@@ -57,8 +87,10 @@ export function makeTools(qloo) {
       const out = [];
       for (const q of (queries || []).slice(0, 6)) {
         try {
-          const tags = await qloo.tags(q, { take: 3 });
-          if (tags[0]) out.push({ query: q, ...tags[0] });
+          const tags = await qloo.tags(q, { take: 5 });
+          // Live API can return unrelated siblings (e.g. "Dining" for "hiking").
+          const best = pickBest(tags, (t) => tagMatchScore(q, t), { minScore: 0.34 });
+          if (best) out.push({ query: q, ...best.item });
         } catch {
           /* a missing tag is not fatal */
         }

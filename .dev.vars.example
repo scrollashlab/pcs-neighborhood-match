@@ -1,3 +1,4 @@
-# Copy to .dev.vars for local development with `npm run dev`,
-# then paste your Qloo hackathon API key after the equals sign.
+# Copy to .dev.vars for local `npm run dev`.
+# For the box smoke test, the live key lives in ~/.secrets/QLOO_HACKATHON_API_KEY
+# (never commit .dev.vars or evidence/).
 QLOO_API_KEY=

@@ -3,3 +3,5 @@ node_modules/
 .dev.vars
 .env
 *.log
+# Live API samples (Qloo ToS: do not publish response data)
+evidence/
