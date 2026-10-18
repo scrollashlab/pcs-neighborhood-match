@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // Live smoke against the Qloo hackathon API.
-// Reads key/URL from ~/.secrets (or env). Never prints the key.
+// Reads the key from env QLOO_API_KEY (and an optional QLOO_API_URL). Never prints the key.
 // Writes redacted sample responses under evidence/.
 
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { QlooClient, normalizeEntity } from "../src/qloo.js";
@@ -13,14 +12,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const EVIDENCE = join(ROOT, "evidence");
 
-function secret(name, envName) {
-  if (process.env[envName]) return process.env[envName].trim();
-  const path = join(homedir(), ".secrets", name);
-  try {
-    return readFileSync(path, "utf8").trim();
-  } catch {
-    throw new Error(`Missing secret ${name} (or env ${envName}). Store at ~/.secrets/${name}`);
-  }
+function env(name, { required = true } = {}) {
+  const value = (process.env[name] || "").trim();
+  if (!value && required) throw new Error(`Missing env ${name}.`);
+  return value;
 }
 
 function redact(obj) {
@@ -51,8 +46,8 @@ function summarizeEntity(e) {
 
 async function main() {
   mkdirSync(EVIDENCE, { recursive: true });
-  const apiKey = secret("QLOO_HACKATHON_API_KEY", "QLOO_API_KEY");
-  const baseUrl = secret("QLOO_HACKATHON_API_URL", "QLOO_API_URL") || "https://hackathon.api.qloo.com";
+  const apiKey = env("QLOO_API_KEY");
+  const baseUrl = env("QLOO_API_URL", { required: false }) || "https://hackathon.api.qloo.com";
   assert(apiKey.length >= 20, "API key looks too short");
   assert(!apiKey.includes(" "), "API key should not contain spaces");
   assert(baseUrl.includes("hackathon.api.qloo.com"), `Unexpected base URL host: ${baseUrl}`);

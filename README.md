@@ -7,14 +7,11 @@ weekend trips, and local favorites the family is likely to share with new neighb
 
 ## The problem
 
-Military families move every two to three years, often with only a few weeks' notice. Most choose a
-neighborhood without seeing it, using base housing handouts and forum threads. Rent and drive time
-are easy to compare. Whether the family will like living there is much harder to judge,
-and it matters most to spouses and children, who did not choose the move.
+Rent and drive time near a new base are easy to compare. Whether the family will like living there
+is much harder to judge.
 
-A general chatbot can list popular neighborhoods near Fort Bragg. It cannot tell a family that likes
-Texas barbecue, George Strait and hiking which part of Fayetteville draws people with the same tastes.
-Qloo's taste data can.
+For example, a family that likes Texas barbecue, George Strait and hiking can ask which parts of
+Fayetteville, near Fort Bragg, draw people with the same tastes.
 
 ## What it does
 
@@ -28,7 +25,7 @@ Qloo's taste data can.
 4. **Weekend trips.** Destinations within driving range that fit what the family enjoys.
 5. **Common ground.** Artists and shows that are popular locally and also fit the family's taste.
 
-The kit prints cleanly to PDF for the family's PCS binder.
+The kit has a print layout for the family's PCS binder.
 
 ## How the agent works
 
@@ -70,7 +67,7 @@ npm test                 # unit tests, no network
 npm run preview:mock     # page preview with made-up data at http://localhost:8787
 ```
 
-With a Qloo hackathon key (env `QLOO_API_KEY`, or `~/.secrets/QLOO_HACKATHON_API_KEY` on the box):
+With a Qloo hackathon key (env `QLOO_API_KEY`):
 
 ```bash
 npm run smoke:live               # hits the real hackathon API; writes redacted samples under evidence/ (gitignored)
@@ -94,7 +91,7 @@ use made-up data in `test/fake-qloo.js`.
 
 ## Limits
 
-- Qloo has less taste data for small towns. When matches are weak, the app says so instead of guessing.
+- When Qloo returns no matches for a section, the app says so instead of guessing.
 - Use this as a starting point. Visit the area and talk to the installation housing office before
   signing a lease.
 
