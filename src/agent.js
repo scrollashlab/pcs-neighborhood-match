@@ -15,6 +15,17 @@ import { labelAreas, makeTools, typeForKind } from "./tools.js";
 
 const MAX_FIELD = 400;
 
+// Plain notes shown when a part of the kit could not load after retries.
+export const NOTE_TEXT = {
+  favorites: "Couldn't look up some of your favorites right now. Try again in a minute.",
+  areas: "Couldn't load areas right now. Try again in a minute.",
+  area_places: "Couldn't load nearby places for some areas right now. Try again in a minute.",
+  first_week: "Couldn't load first-week places right now. Try again in a minute.",
+  kids: "Couldn't load kid-friendly places right now. Try again in a minute.",
+  weekend: "Couldn't load weekend trips right now. Try again in a minute.",
+  common_ground: "Couldn't load some local favorites right now. Try again in a minute.",
+};
+
 export function sanitizeInput(raw = {}) {
   const s = (v) => String(v ?? "").replace(/[\u0000-\u001f]+/g, " ").slice(0, MAX_FIELD).trim();
   const budget = Number.parseInt(raw.budget, 10);
@@ -271,13 +282,28 @@ export async function runAgent(rawInput, { qloo, llm }) {
   }
 
   // 2. Ground in Qloo
-  const home = input.homeCity ? await tools.resolve_locality({ name: input.homeCity }).catch(() => null) : null;
+  const notes = [];
+  const note = (section) => {
+    if (!notes.some((n) => n.section === section)) notes.push({ section, text: NOTE_TEXT[section] });
+  };
+  let homeFailed = false;
+  const home = input.homeCity
+    ? await tools.resolve_locality({ name: input.homeCity }).catch(() => {
+        homeFailed = true;
+        return null;
+      })
+    : null;
   const interestQueries = [...profile.interests];
   if (profile.kids) interestQueries.push("family friendly");
   const [favorites, tags] = await Promise.all([
     tools.resolve_favorites({ items: profile.favorites, nearLocality: home }),
     tools.find_tags({ queries: interestQueries }),
   ]);
+  const failedLookups = favorites.filter((f) => f.failed).map((f) => f.input);
+  if (homeFailed || failedLookups.length || tags.failedQueries?.length) {
+    note("favorites");
+    log("ground", `Lookups failed after retries: ${[...(homeFailed ? [`home city ${input.homeCity}`] : []), ...failedLookups, ...(tags.failedQueries || [])].join(", ")}.`);
+  }
   const resolvedCount = favorites.filter((f) => f.id).length;
   const homeNote = home?.lat != null
     ? ` (place search centered on ${home.name} at ${Number(home.lat).toFixed(2)},${Number(home.lon).toFixed(2)})`
@@ -286,6 +312,7 @@ export async function runAgent(rawInput, { qloo, llm }) {
       : "";
   log("ground", `Qloo resolved ${resolvedCount} of ${favorites.length} favorites and ${tags.length} interest tags${homeNote}.`);
   if (!resolvedCount && !tags.length) {
+    if (notes.length) throw new UserError("Qloo is busy right now and couldn't look up your favorites. Try again in a minute.");
     throw new UserError("Qloo couldn't match any of those favorites. Try full names, like a band name or a restaurant with its city.");
   }
 
@@ -308,48 +335,60 @@ export async function runAgent(rawInput, { qloo, llm }) {
   const kidTag = tags.find((t) => t.query === "family friendly")?.id;
   const ids = p.keepEntityIds;
 
-  // 4. Execute, with broaden-and-retry on empty results
-  const retry = async (label, attempts) => {
+  // 4. Execute, with broaden-and-retry on empty results. A section whose queries
+  // failed (rather than came back empty) gets a note in the kit.
+  const retry = async (label, section, attempts) => {
+    let errored = false;
     for (const [i, fn] of attempts.entries()) {
       try {
         const res = await fn();
         if (res && res.length) {
-          if (i > 0) log("retry", `${label}: first query came back empty, broadened and retried.`);
+          if (i > 0) log("retry", `${label}: first query ${errored ? "failed" : "came back empty"}, broadened and retried.`);
           return res;
         }
       } catch {
-        /* try the broader query */
+        errored = true; // try the broader query
       }
     }
-    log("retry", `${label}: no results after broadening.`);
+    if (errored) {
+      note(section);
+      log("retry", `${label}: could not load after retries.`);
+    } else {
+      log("retry", `${label}: no results after broadening.`);
+    }
     return [];
   };
 
   const loc = destination.locality;
   const [areasRaw, firstWeek, kidsPlaces, weekend, ...ground] = await Promise.all([
-    retry("Where to live", [
+    retry("Where to live", "areas", [
       () => tools.taste_heatmap({ locality: loc, entityIds: ids, tagIds: p.areaTagIds }),
       () => tools.taste_heatmap({ locality: loc, entityIds: ids, tagIds: [] }),
     ]),
-    retry("First week", [
+    retry("First week", "first_week", [
       () => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [...p.foodTagIds, ...p.activityTagIds], priceMax: input.budget, take: 8 }),
       () => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [], priceMax: input.budget, take: 8 }),
     ]),
     profile.kids && kidTag
-      ? retry("Kids", [() => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [kidTag], take: 6 })])
+      ? retry("Kids", "kids", [() => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [kidTag], take: 6 })])
       : Promise.resolve([]),
-    retry("Weekend trips", [
+    retry("Weekend trips", "weekend", [
       () => tools.weekend_destinations({ locality: loc, entityIds: ids, radiusKm: p.weekendRadiusKm }),
       () => tools.weekend_destinations({ locality: loc, entityIds: ids, radiusKm: 600 }),
     ]),
     ...p.commonGround.map((k) =>
-      retry(`Common ground (${k})`, [() => tools.local_common_ground({ locality: loc, entityIds: ids, type: KIND_TYPE[k], take: 4 })]),
+      retry(`Common ground (${k})`, "common_ground", [() => tools.local_common_ground({ locality: loc, entityIds: ids, type: KIND_TYPE[k], take: 4 })]),
     ),
   ]);
 
   const top = areasRaw.slice(0, 3);
   const areaPlaces = await Promise.all(
-    top.map((a) => tools.places_in_area({ geohash: a.geohash, entityIds: ids, tagIds: [], take: 5 }).catch(() => [])),
+    top.map((a) =>
+      tools.places_in_area({ geohash: a.geohash, entityIds: ids, tagIds: [], take: 5 }).catch(() => {
+        note("area_places");
+        return [];
+      }),
+    ),
   );
   const areaNames = labelAreas(areaPlaces);
   const areas = top.map((a, i) => ({ ...a, name: areaNames[i], places: areaPlaces[i] }));
@@ -375,9 +414,10 @@ export async function runAgent(rawInput, { qloo, llm }) {
     log("brief", "Wrote the kit from templates.");
   }
 
+  kit.notes = notes;
   return {
     destination,
-    favorites: favorites.map(({ input: typed, kind, id, name }) => ({ typed, kind, id, matched: name || null })),
+    favorites: favorites.map(({ input: typed, kind, id, name, failed }) => ({ typed, kind, id, matched: name || null, failed: Boolean(failed) })),
     kit,
     trace,
     stats: { qlooCalls: qloo.calls, llmSteps, ms: Date.now() - started },

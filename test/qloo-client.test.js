@@ -63,7 +63,8 @@ test("retries stop at maxAttempts and total waiting stays under maxTotalMs", asy
   let n = 0;
   const q = client(async () => (n++, json({}, 503)), c, { maxTotalMs: 10000 });
   await assert.rejects(() => q.search("x"), (e) => e.status === 503);
-  assert.equal(n, 4);
+  assert.equal(n, 6); // default maxAttempts
+  assert.deepEqual(c.waits, [300, 600, 1200, 2400, 4000]);
   assert.ok(c.waits.reduce((a, b) => a + b, 0) <= 10000);
 });
 

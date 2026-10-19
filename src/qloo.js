@@ -66,6 +66,46 @@ export function retryAfterMs(value, now = Date.now()) {
   return Number.isNaN(at) ? null : Math.max(0, at - now);
 }
 
+// Caps how many Qloo requests are in flight at once. acquire() resolves with a
+// release function, or with null if no slot frees up before the deadline (epoch ms).
+export class Limiter {
+  constructor(max = 4) {
+    this.max = max;
+    this.active = 0;
+    this.peak = 0;
+    this.queue = [];
+  }
+  acquire(deadline, now = Date.now) {
+    if (this.active < this.max) return Promise.resolve(this.#grant());
+    const wait = deadline - now();
+    if (wait <= 0) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const entry = { resolve, timer: null };
+      entry.timer = setTimeout(() => {
+        const i = this.queue.indexOf(entry);
+        if (i >= 0) this.queue.splice(i, 1);
+        resolve(null);
+      }, wait);
+      this.queue.push(entry);
+    });
+  }
+  #grant() {
+    this.active++;
+    this.peak = Math.max(this.peak, this.active);
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      this.active--;
+      const next = this.queue.shift();
+      if (next) {
+        clearTimeout(next.timer);
+        next.resolve(this.#grant());
+      }
+    };
+  }
+}
+
 export class QlooClient {
   /**
    * @param {object} opts
@@ -77,6 +117,8 @@ export class QlooClient {
    * @param {number} [opts.maxTotalMs]   cap on total time per request, retries and waits included
    * @param {number} [opts.baseDelayMs]  first backoff step; doubles each retry (full jitter)
    * @param {number} [opts.maxDelayMs]   cap on a single backoff wait
+   * @param {Limiter} [opts.limiter]     shared in-flight limit (default: 4 for this client)
+   * @param {number} [opts.maxConcurrent]
    */
   constructor({
     apiKey,
@@ -84,13 +126,15 @@ export class QlooClient {
     cache,
     timeoutMs = 12000,
     baseUrl = QLOO_BASE,
-    maxAttempts = 4,
+    maxAttempts = 6,
     maxTotalMs = 10000,
     baseDelayMs = 300,
     maxDelayMs = 4000,
     sleep: sleepImpl = sleep,
     random = Math.random,
     now = Date.now,
+    limiter,
+    maxConcurrent = 4,
   }) {
     if (!apiKey) throw new Error("QLOO_API_KEY is not set");
     this.apiKey = apiKey;
@@ -105,8 +149,9 @@ export class QlooClient {
     this.sleep = sleepImpl;
     this.random = random;
     this.now = now;
+    this.limiter = limiter || new Limiter(maxConcurrent);
     this.calls = 0;
-    this.stats = { calls: 0, cacheHits: 0, retries: 0, rateLimited: 0, serverErrors: 0, waitedMs: 0, gaveUp: 0 };
+    this.stats = { calls: 0, cacheHits: 0, retries: 0, rateLimited: 0, serverErrors: 0, waitedMs: 0, gaveUp: 0, queueTimeouts: 0, queuedMs: 0 };
   }
 
   backoffMs(attempt) {
@@ -131,14 +176,30 @@ export class QlooClient {
         return hit;
       }
     }
+    // One deadline per request, measured from this call: time spent queued for a
+    // slot, in flight and backing off all count against maxTotalMs. A slot is held
+    // only while a fetch is in flight, never during a backoff wait.
     const started = this.now();
+    const deadline = started + this.maxTotalMs;
     let lastErr;
     for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
-      const remaining = this.maxTotalMs - (this.now() - started);
-      if (remaining <= 0) break;
+      const queuedAt = this.now();
+      const release = await this.limiter.acquire(deadline, this.now);
+      this.stats.queuedMs += this.now() - queuedAt;
+      if (!release) {
+        this.stats.queueTimeouts++;
+        lastErr = lastErr || new QlooError("Qloo request timed out waiting for a free slot", 0, path);
+        break;
+      }
+      const remaining = deadline - this.now();
+      if (remaining <= 0) {
+        release();
+        break;
+      }
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), Math.min(this.timeoutMs, remaining));
       let res;
+      let body;
       try {
         this.calls++;
         this.stats.calls++;
@@ -147,10 +208,13 @@ export class QlooClient {
           headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
           signal: ctrl.signal,
         });
+        if (res.status !== 429 && res.status < 500) body = await res.json().catch(() => ({}));
       } catch (err) {
         lastErr = err; // network error or timeout: retryable
+        res = undefined;
       } finally {
         clearTimeout(timer);
+        release();
       }
       let hinted = null;
       if (res) {
@@ -160,7 +224,6 @@ export class QlooClient {
           lastErr = new QlooError(`Qloo ${res.status}`, res.status, path);
           hinted = retryAfterMs(res.headers?.get?.("retry-after"), this.now());
         } else {
-          const body = await res.json().catch(() => ({}));
           if (!res.ok) {
             const msg = body?.error?.message || body?.message || `Qloo ${res.status}`;
             throw new QlooError(msg, res.status, path); // other 4xx: no retry, never cached
@@ -171,7 +234,7 @@ export class QlooClient {
       }
       if (attempt === this.maxAttempts - 1) break;
       const wait = hinted != null ? hinted : this.backoffMs(attempt);
-      if (this.now() - started + wait > this.maxTotalMs) break; // would blow the time cap
+      if (this.now() + wait >= deadline) break; // would blow the time cap
       this.stats.retries++;
       this.stats.waitedMs += wait;
       await this.sleep(wait);

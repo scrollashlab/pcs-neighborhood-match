@@ -44,9 +44,11 @@ still builds the kit from Qloo results with fixed wording, and the step list say
 
 ## Architecture
 
-- **Cloudflare Worker** (`src/worker.js`) serves the page and the `/api/kit` endpoint on the free plan.
+- **Cloudflare Worker** (`src/worker.js`) serves the page and the `/api/kit` endpoint. It is built to run on
+  the Workers Free plan.
 - **Workers AI** runs the model (`@cf/meta/llama-3.3-70b-instruct-fp8-fast` by default; set
-  `LLM_MODEL` to change it). It uses the free daily allowance and cannot bill on the Workers Free plan.
+  `LLM_MODEL` to change it). It is built to run within the free daily
+  Workers AI allowance on the Workers Free plan.
 - **Qloo hackathon API** (`https://hackathon.api.qloo.com`) is called through `src/qloo.js`, which
   retries on 429 and 5xx responses and caches results in memory. The key is a Worker secret and never
   reaches the browser.

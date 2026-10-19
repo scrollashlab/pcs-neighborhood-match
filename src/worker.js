@@ -1,6 +1,6 @@
 import { runAgent, UserError } from "./agent.js";
 import { makeLlm } from "./llm.js";
-import { QlooClient, TtlCache } from "./qloo.js";
+import { Limiter, QlooClient, TtlCache } from "./qloo.js";
 import { STATIONS } from "./stations.js";
 
 // Small in-isolate caches: Qloo responses (10 min) and finished kits (10 min).
@@ -8,6 +8,8 @@ import { STATIONS } from "./stations.js";
 // allocation for new requests. Only successful responses are cached.
 const qlooCache = new TtlCache({ ttlMs: 10 * 60 * 1000, max: 500 });
 const kitCache = new TtlCache({ ttlMs: 10 * 60 * 1000, max: 100 });
+// At most 4 Qloo requests in flight per isolate, shared across concurrent kit requests.
+const qlooLimiter = new Limiter(4);
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 
@@ -29,9 +31,10 @@ export default {
         const key = JSON.stringify(input);
         const cached = kitCache.get(key);
         if (cached) return json({ ...cached, cached: true });
-        const qloo = new QlooClient({ apiKey: env.QLOO_API_KEY, cache: qlooCache });
+        const qloo = new QlooClient({ apiKey: env.QLOO_API_KEY, cache: qlooCache, limiter: qlooLimiter });
         const result = await runAgent(input, { qloo, llm: makeLlm(env) });
-        kitCache.put(key, result);
+        // A kit with a part that failed to load is never cached, so the next try rebuilds it.
+        if (!result.kit.notes?.length) kitCache.put(key, result);
         return json(result);
       }
       if (url.pathname.startsWith("/api/")) return json({ error: "Not found." }, 404);

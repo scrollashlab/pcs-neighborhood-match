@@ -1,7 +1,7 @@
 // Synthetic stand-in for the Qloo API used by the tests. All names and IDs
 // here are made up; no real Qloo response data is stored in this repository.
 
-export function fakeFetch({ emptyFirstHeatmap = false, emptyFirstBudgetPlaces = false, log = [] } = {}) {
+export function fakeFetch({ emptyFirstHeatmap = false, emptyFirstBudgetPlaces = false, log = [], fail = {}, failStatus = 400, delayMs = 0, inflight = null } = {}) {
   let heatmapCalls = 0;
   let budgetPlaceCalls = 0;
   return async (url, init) => {
@@ -9,6 +9,19 @@ export function fakeFetch({ emptyFirstHeatmap = false, emptyFirstBudgetPlaces = 
     log.push({ path: u.pathname, params: Object.fromEntries(u.searchParams), headers: init?.headers });
     const p = u.searchParams;
     const ok = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    if (inflight) {
+      inflight.now++;
+      inflight.peak = Math.max(inflight.peak, inflight.now);
+      await new Promise((r) => setTimeout(r, delayMs));
+      inflight.now--;
+    }
+    // fail: { insights: ["urn:entity:destination"], search: ["urn:entity:place"], tags: true }
+    const failNow =
+      (u.pathname === "/v2/insights" && (fail.insights || []).includes(u.searchParams.get("filter.type")) &&
+        (!fail.kidsOnly || (u.searchParams.get("signal.interests.tags") || "").includes("FAMILY"))) ||
+      (u.pathname === "/search" && (fail.search || []).includes(u.searchParams.get("types"))) ||
+      (u.pathname === "/v2/tags" && fail.tags);
+    if (failNow) return new Response(JSON.stringify({ error: { message: "simulated failure" } }), { status: failStatus, headers: { "content-type": "application/json" } });
     // Mirror the live API: an empty list parameter such as signal.interests.tags= is a 400.
     for (const [k, v] of u.searchParams) {
       if (v === "") return new Response(JSON.stringify({ error: { message: `${k} must not be empty` } }), { status: 400, headers: { "content-type": "application/json" } });

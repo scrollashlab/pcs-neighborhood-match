@@ -76,7 +76,8 @@ export function makeTools(qloo) {
             if (!best) return { input: it.name, kind: it.kind, id: null };
             return { input: it.name, kind: it.kind, matchScore: Math.round(best.score * 1000) / 1000, ...pick(best.item) };
           } catch {
-            return { input: it.name, kind: it.kind, id: null };
+            // Lookup failed after retries: keep it visible as a failure, not a "no match".
+            return { input: it.name, kind: it.kind, id: null, failed: true };
           }
         }),
       );
@@ -85,6 +86,7 @@ export function makeTools(qloo) {
 
     async find_tags({ queries }) {
       const out = [];
+      out.failedQueries = [];
       for (const q of (queries || []).slice(0, 6)) {
         try {
           const tags = await qloo.tags(q, { take: 5 });
@@ -92,7 +94,7 @@ export function makeTools(qloo) {
           const best = pickBest(tags, (t) => tagMatchScore(q, t), { minScore: 0.34 });
           if (best) out.push({ query: q, ...best.item });
         } catch {
-          /* a missing tag is not fatal */
+          out.failedQueries.push(q); // reported to the family as a note, not dropped silently
         }
       }
       return out;

@@ -1,3 +1,4 @@
+import { listChildren, notesFor } from "./notes.js";
 const $ = (id) => document.getElementById(id);
 const FIELDS = ["stationId", "otherCity", "homeCity", "places", "music", "screen", "reading", "activities", "kids", "budget"];
 
@@ -97,14 +98,10 @@ function itemNode(e, index) {
   );
 }
 
-function fill(id, list) {
-  const ul = $(id);
-  ul.replaceChildren();
-  if (!list || !list.length) {
-    ul.append(el("li", { className: "empty", textContent: "Qloo didn't return strong matches here for this search." }));
-    return;
-  }
-  list.forEach((e) => ul.append(itemNode(e)));
+const EMPTY = "Qloo didn't return strong matches here for this search.";
+
+function fill(id, list, kit) {
+  $(id).replaceChildren(...listChildren({ items: list, notes: notesFor(kit, id), emptyText: EMPTY, itemNode: (e) => itemNode(e), el }));
 }
 
 function render(data) {
@@ -112,26 +109,31 @@ function render(data) {
   $("headline").textContent = k.headline;
   $("summary").textContent = k.summary;
 
-  const areas = $("areas");
-  areas.replaceChildren();
-  k.areas.forEach((a, i) => {
+  const generalNotes = notesFor(k, "notes");
+  $("notes").hidden = !generalNotes.length;
+  $("notes").replaceChildren(...generalNotes.map((text) => el("p", { className: "note", role: "status", textContent: text })));
+
+  const areaNode = (a, i) => {
     const li = itemNode({ name: `${a.name} · ${Math.round((a.affinity || 0) * 100)}% taste match`, why: a.why }, i);
     if (a.places?.length) li.querySelector("div").append(el("div", { className: "meta", textContent: `Nearby: ${a.places.slice(0, 4).map((p) => p.name).join(", ")}` }));
-    areas.append(li);
-  });
-  if (!k.areas.length) areas.append(el("li", { className: "empty", textContent: "Qloo didn't have enough taste data to rank areas here." }));
+    return li;
+  };
+  $("areas").replaceChildren(
+    ...listChildren({ items: k.areas, notes: notesFor(k, "areas"), emptyText: "Qloo didn't have enough taste data to rank areas here.", itemNode: areaNode, el }),
+  );
 
-  fill("first_week", k.first_week);
-  fill("weekend", k.weekend);
-  fill("common_ground", k.common_ground);
-  $("kids-card").hidden = !k.kids?.length;
-  if (k.kids?.length) fill("kids_list", k.kids);
+  fill("first_week", k.first_week, k);
+  fill("weekend", k.weekend, k);
+  fill("common_ground", k.common_ground, k);
+  const kidNotes = notesFor(k, "kids_list");
+  $("kids-card").hidden = !k.kids?.length && !kidNotes.length;
+  if (!$("kids-card").hidden) fill("kids_list", k.kids, k);
 
   const trace = $("trace");
   trace.replaceChildren(...data.trace.map((t) => el("li", {}, el("strong", { textContent: `${t.step} ` }), `${t.detail} `, el("span", { className: "meta", textContent: `(${(t.ms / 1000).toFixed(1)} s)` }))));
   const matches = $("matches");
   matches.replaceChildren(
-    ...data.favorites.map((f) => el("li", { textContent: f.matched ? `${f.typed}: matched to ${f.matched}` : `${f.typed}: no match` })),
+    ...data.favorites.map((f) => el("li", { textContent: f.matched ? `${f.typed}: matched to ${f.matched}` : f.failed ? `${f.typed}: couldn't look up right now` : `${f.typed}: no match` })),
   );
   $("stats").textContent = `${data.stats.qlooCalls} Qloo calls, ${data.stats.llmSteps} model steps, ${(data.stats.ms / 1000).toFixed(1)} s${data.cached ? " (cached)" : ""}.`;
 
