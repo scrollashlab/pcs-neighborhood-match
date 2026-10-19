@@ -7,8 +7,7 @@ weekend trips, and local favorites the family is likely to share with new neighb
 
 ## The problem
 
-Rent and drive time near a new base are easy to compare. Whether the family will like living there
-is much harder to judge.
+Whether a family will like living near a new base is hard to judge from far away.
 
 For example, a family that likes Texas barbecue, George Strait and hiking can ask which parts of
 Fayetteville, near Fort Bragg, draw people with the same tastes.
@@ -34,10 +33,10 @@ The agent runs five steps. The app lists each step, with timings, under "How the
 | Step | What happens | Qloo endpoints |
 |---|---|---|
 | Understand | The model turns free text ("Rudy's, Tejano, Bluey, beach days") into typed favorites and interests. | none |
-| Ground | Tools look up each favorite as a Qloo entity and each interest as a Qloo tag. Place searches use a `lat,lon` filter around the family's current city. Locality and place hits are scored so a wrong-country name match or an unrelated tag is dropped. | `/search`, `/v2/tags` |
-| Plan | The model checks the matches, drops wrong ones (a song instead of a band), picks the tags that matter for housing, food and activities, and sets how far to look for weekend trips. | none |
+| Ground | Tools look up each favorite as a Qloo entity and each interest as a Qloo tag. When the family enters its current city, place searches use a `lat,lon` filter around it. Locality, place and tag hits are scored to catch wrong-country name matches and unrelated tags. | `/search`, `/v2/tags` |
+| Plan | The model is asked to check the matches, drop wrong ones (a song instead of a band), pick the tags that matter for housing, food and activities, and set how far to look for weekend trips. Code keeps only IDs that came from the Ground step. | none |
 | Execute | Tools query Qloo in parallel. Most queries that come back empty are broadened and retried. | `/v2/insights` with `urn:heatmap`, `urn:entity:place`, `urn:entity:destination`, `urn:entity:artist`, `urn:entity:tv_show`; `signal.interests.entities`, `signal.interests.tags`, `signal.location.query`, `filter.location.query`, `filter.location.geohash`, `filter.price_level.max`, `feature.explainability` |
-| Brief | The model writes the kit using only tool results. A validator removes any item whose ID did not come from Qloo, so the agent cannot invent a restaurant. | none |
+| Brief | The model is told to write the kit from tool results only, and a validator removes any listed item whose ID did not come from Qloo, so no restaurant reaches the lists unless Qloo returned it. | none |
 
 Every model step has a fallback that needs no model. If the free model allowance runs out, the app
 still builds the kit from Qloo results with fixed wording, and the step list says so.
@@ -86,10 +85,10 @@ npm run deploy
 
 ## Privacy
 
-There are no accounts and no database. The form text goes to the Worker, is used for one request,
-and is held only in a short-lived memory cache so a repeat request does not query Qloo again. The
-app does not ask for names or addresses. No Qloo responses are stored in this repository; the tests
-use made-up data in `test/fake-qloo.js`.
+There are no accounts and no database. The form text goes to the Worker, which sends it to Workers AI
+and the Qloo API to build the kit. The Worker keeps it only in a 10-minute memory cache so a repeat
+request does not query Qloo again. The app does not ask for names or addresses. No Qloo responses
+are stored in this repository; the tests use made-up data in `test/fake-qloo.js`.
 
 ## Limits
 
