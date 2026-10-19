@@ -218,3 +218,17 @@ export function nameArea(places, fallback) {
   if (places?.[0]?.name) return `Around ${places[0].name}`;
   return fallback;
 }
+
+// Name every area. When a name repeats across areas (often the city, if Qloo has no
+// neighborhood) or falls back to "Area N", use "Around <top place>" instead: the first
+// place Qloo returned in that area. An area with no places keeps "Area N".
+export function labelAreas(placesPerArea) {
+  const names = placesPerArea.map((places, i) => nameArea(places, `Area ${i + 1}`));
+  const counts = new Map();
+  for (const n of names) counts.set(n, (counts.get(n) || 0) + 1);
+  return names.map((n, i) => {
+    const top = placesPerArea[i]?.[0]?.name;
+    const weak = counts.get(n) > 1 || /^Area \d+$/.test(n);
+    return weak && top ? `Around ${top}` : n;
+  });
+}

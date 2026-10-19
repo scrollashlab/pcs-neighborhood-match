@@ -16,8 +16,8 @@ Fayetteville, near Fort Bragg, draw people with the same tastes.
 ## What it does
 
 1. **Areas that match your taste.** A Qloo heatmap of the area around the new base, seeded with the
-   family's favorites. Cells are grouped into areas of about 5 km, ranked, named after places Qloo
-   returns inside them, and shown on a map.
+   family's favorites. Cells are grouped into areas of about 5 km, ranked and shown on a map. Each
+   area is labeled after places Qloo returns inside it, when it has any.
 2. **Your first week.** Restaurants, cafes and venues near the base that match the places the family
    will miss, within their eating-out budget. Each one shows which favorite led to it, using Qloo's
    explainability data.
@@ -36,7 +36,7 @@ The agent runs five steps. The app lists each step, with timings, under "How the
 | Understand | The model turns free text ("Rudy's, Tejano, Bluey, beach days") into typed favorites and interests. | none |
 | Ground | Tools look up each favorite as a Qloo entity and each interest as a Qloo tag. Place searches use a `lat,lon` filter around the family's current city. Locality and place hits are scored so a wrong-country name match or an unrelated tag is dropped. | `/search`, `/v2/tags` |
 | Plan | The model checks the matches, drops wrong ones (a song instead of a band), picks the tags that matter for housing, food and activities, and sets how far to look for weekend trips. | none |
-| Execute | Tools query Qloo in parallel. A query that comes back empty is broadened and retried. | `/v2/insights` with `urn:heatmap`, `urn:entity:place`, `urn:entity:destination`, `urn:entity:artist`, `urn:entity:tv_show`; `signal.interests.entities`, `signal.interests.tags`, `signal.location.query`, `filter.location.query`, `filter.location.geohash`, `filter.price_level.max`, `feature.explainability` |
+| Execute | Tools query Qloo in parallel. Most queries that come back empty are broadened and retried. | `/v2/insights` with `urn:heatmap`, `urn:entity:place`, `urn:entity:destination`, `urn:entity:artist`, `urn:entity:tv_show`; `signal.interests.entities`, `signal.interests.tags`, `signal.location.query`, `filter.location.query`, `filter.location.geohash`, `filter.price_level.max`, `feature.explainability` |
 | Brief | The model writes the kit using only tool results. A validator removes any item whose ID did not come from Qloo, so the agent cannot invent a restaurant. | none |
 
 Every model step has a fallback that needs no model. If the free model allowance runs out, the app

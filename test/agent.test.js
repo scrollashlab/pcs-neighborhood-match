@@ -3,7 +3,7 @@ import test from "node:test";
 import { heuristicProfile, runAgent, sanitizeInput, UserError } from "../src/agent.js";
 import { parseJsonLoose } from "../src/llm.js";
 import { QLOO_BASE, QlooClient, parseExplainability } from "../src/qloo.js";
-import { nameArea, rankAreas } from "../src/tools.js";
+import { labelAreas, nameArea, rankAreas } from "../src/tools.js";
 import { fakeFetch, fakeLlm } from "./fake-qloo.js";
 
 const FORM = {
@@ -135,4 +135,50 @@ test("model text is cleaned of dash punctuation and exclamation marks", async ()
   const { plain } = await import("../src/agent.js");
   assert.equal(plain("Great tacos \u2014 near the gate!"), "Great tacos, near the gate.");
   assert.equal(plain("Quiet streets \u2013 good parks"), "Quiet streets, good parks");
+});
+
+test("family with no activities and no kids still gets named areas and first-week places", async () => {
+  const log = [];
+  const q = new QlooClient({ apiKey: "test-key", fetch: fakeFetch({ log }), timeoutMs: 2000 });
+  const out = await runAgent({ ...FORM, activities: "", kids: "none" }, { qloo: q, llm: null });
+  assert.ok(!log.some((l) => Object.values(l.params).includes("")), "no empty query parameters sent");
+  assert.ok(out.kit.areas.length >= 1);
+  assert.ok(out.kit.areas.every((a) => !/^Area \d+$/.test(a.name)));
+  assert.equal(out.kit.areas[0].name, "Haymount");
+  assert.ok(out.kit.first_week.length > 0);
+  assert.equal(out.kit.kids.length, 0);
+});
+
+test("labelAreas uses 'Around <top place>' when area names repeat", () => {
+  const names = labelAreas([
+    [{ name: "Cafe One", city: "Fayetteville" }, { name: "Diner", city: "Fayetteville" }],
+    [{ name: "Taco Two", city: "Fayetteville" }],
+    [{ name: "Bakery", neighborhood: "Haymount" }],
+  ]);
+  assert.deepEqual(names, ["Around Cafe One", "Around Taco Two", "Haymount"]);
+});
+
+test("labelAreas keeps 'Area N' only for an area with no places", () => {
+  const names = labelAreas([[], [{ name: "Park Grill", city: "Spring Lake" }]]);
+  assert.deepEqual(names, ["Area 1", "Spring Lake"]);
+});
+
+test("agent gives each area a distinct name when the city repeats", async () => {
+  const out = await runAgent(FORM, { qloo: client(), llm: null });
+  const names = out.kit.areas.map((a) => a.name);
+  assert.equal(new Set(names).size, names.length);
+  assert.equal(names[0], "Haymount");
+  assert.ok(names.slice(1).every((n) => n.startsWith("Around PLACE ")));
+});
+
+test("broadened first-week retry keeps the budget filter", async () => {
+  const log = [];
+  const q = new QlooClient({ apiKey: "test-key", fetch: fakeFetch({ log, emptyFirstBudgetPlaces: true }), timeoutMs: 2000 });
+  const out = await runAgent(FORM, { qloo: q, llm: null });
+  assert.ok(out.trace.some((t) => t.step === "retry" && /First week/.test(t.detail)));
+  const budgeted = log.filter((l) => l.path === "/v2/insights" && l.params["filter.type"] === "urn:entity:place" && l.params["filter.price_level.max"]);
+  assert.ok(budgeted.length >= 2, "first query and retry both carry the budget");
+  assert.ok(budgeted.every((l) => l.params["filter.price_level.max"] === "2"));
+  assert.ok(budgeted.some((l) => !l.params["signal.interests.tags"]), "the retry drops tags but not the budget");
+  assert.ok(out.kit.first_week.length > 0);
 });

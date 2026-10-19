@@ -5,3 +5,7 @@ node_modules/
 *.log
 # Live API samples (Qloo ToS: do not publish response data)
 evidence/
+# Internal planning files; they live outside this repo and must never be committed
+NOTES.md
+PLAN.md
+DEVPOST_DRAFT.md

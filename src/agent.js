@@ -11,7 +11,7 @@
 // free model allocation is used up.
 
 import { resolveDestination } from "./stations.js";
-import { makeTools, nameArea, typeForKind } from "./tools.js";
+import { labelAreas, makeTools, typeForKind } from "./tools.js";
 
 const MAX_FIELD = 400;
 
@@ -333,7 +333,7 @@ export async function runAgent(rawInput, { qloo, llm }) {
     ]),
     retry("First week", [
       () => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [...p.foodTagIds, ...p.activityTagIds], priceMax: input.budget, take: 8 }),
-      () => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [], take: 8 }),
+      () => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [], priceMax: input.budget, take: 8 }),
     ]),
     profile.kids && kidTag
       ? retry("Kids", [() => tools.places_in_area({ locality: loc, entityIds: ids, tagIds: [kidTag], take: 6 })])
@@ -351,7 +351,8 @@ export async function runAgent(rawInput, { qloo, llm }) {
   const areaPlaces = await Promise.all(
     top.map((a) => tools.places_in_area({ geohash: a.geohash, entityIds: ids, tagIds: [], take: 5 }).catch(() => [])),
   );
-  const areas = top.map((a, i) => ({ ...a, name: nameArea(areaPlaces[i], `Area ${i + 1}`), places: areaPlaces[i] }));
+  const areaNames = labelAreas(areaPlaces);
+  const areas = top.map((a, i) => ({ ...a, name: areaNames[i], places: areaPlaces[i] }));
   const commonGround = dedupe(ground.flat());
   log("execute", `Found ${areas.length} areas, ${firstWeek.length} first-week places, ${weekend.length} weekend trips and ${commonGround.length} local favorites. ${qloo.calls} Qloo calls so far.`);
 

@@ -47,6 +47,8 @@ export class QlooClient {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === "") continue;
+      // Live API answers 400 to an empty list parameter (e.g. signal.interests.tags=).
+      if (Array.isArray(v) && !v.length) continue;
       qs.set(k, Array.isArray(v) ? v.join(",") : String(v));
     }
     const url = `${this.baseUrl}${path}?${qs.toString()}`;

@@ -1,13 +1,18 @@
 // Synthetic stand-in for the Qloo API used by the tests. All names and IDs
 // here are made up; no real Qloo response data is stored in this repository.
 
-export function fakeFetch({ emptyFirstHeatmap = false, log = [] } = {}) {
+export function fakeFetch({ emptyFirstHeatmap = false, emptyFirstBudgetPlaces = false, log = [] } = {}) {
   let heatmapCalls = 0;
+  let budgetPlaceCalls = 0;
   return async (url, init) => {
     const u = new URL(url);
     log.push({ path: u.pathname, params: Object.fromEntries(u.searchParams), headers: init?.headers });
     const p = u.searchParams;
     const ok = (body) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    // Mirror the live API: an empty list parameter such as signal.interests.tags= is a 400.
+    for (const [k, v] of u.searchParams) {
+      if (v === "") return new Response(JSON.stringify({ error: { message: `${k} must not be empty` } }), { status: 400, headers: { "content-type": "application/json" } });
+    }
 
     if (u.pathname === "/search") {
       const q = p.get("query");
@@ -101,6 +106,10 @@ export function fakeFetch({ emptyFirstHeatmap = false, log = [] } = {}) {
         });
       }
       const geohash = p.get("filter.location.geohash");
+      if (type === "urn:entity:place" && p.get("filter.price_level.max")) {
+        budgetPlaceCalls++;
+        if (emptyFirstBudgetPlaces && budgetPlaceCalls === 1) return ok({ success: true, results: { entities: [] } });
+      }
       const prefix = { "urn:entity:place": "PLACE", "urn:entity:destination": "DEST", "urn:entity:artist": "ART", "urn:entity:tv_show": "TV" }[type] || "X";
       const n = Number(p.get("take") || 3);
       const entities = Array.from({ length: Math.min(n, 4) }, (_, i) => ({
