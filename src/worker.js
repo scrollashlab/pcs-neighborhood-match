@@ -1,12 +1,13 @@
 import { runAgent, UserError } from "./agent.js";
 import { makeLlm } from "./llm.js";
-import { QlooClient } from "./qloo.js";
+import { QlooClient, TtlCache } from "./qloo.js";
 import { STATIONS } from "./stations.js";
 
-// Small in-isolate caches: Qloo responses and finished kits. They cut repeat
-// Qloo calls and keep the free model allocation for new requests.
-const qlooCache = lruCache(500);
-const kitCache = lruCache(100);
+// Small in-isolate caches: Qloo responses (10 min) and finished kits (10 min).
+// They cut repeat Qloo calls, which helps with 429s, and keep the free model
+// allocation for new requests. Only successful responses are cached.
+const qlooCache = new TtlCache({ ttlMs: 10 * 60 * 1000, max: 500 });
+const kitCache = new TtlCache({ ttlMs: 10 * 60 * 1000, max: 100 });
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 
@@ -45,21 +46,4 @@ export default {
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
-}
-
-function lruCache(limit) {
-  const m = new Map();
-  return {
-    get(k) {
-      if (!m.has(k)) return undefined;
-      const v = m.get(k);
-      m.delete(k);
-      m.set(k, v);
-      return v;
-    },
-    put(k, v) {
-      m.set(k, v);
-      if (m.size > limit) m.delete(m.keys().next().value);
-    },
-  };
 }

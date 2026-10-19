@@ -25,22 +25,94 @@ export class QlooError extends Error {
   }
 }
 
+// Short-lived, bounded in-memory cache for successful Qloo responses, keyed by the
+// full request URL. On a Worker it lives per isolate: repeated demo requests that
+// land on the same isolate skip Qloo entirely. Entries expire after ttlMs; the
+// oldest entry is evicted past max.
+export class TtlCache {
+  constructor({ ttlMs = 10 * 60 * 1000, max = 500, now = Date.now } = {}) {
+    this.ttlMs = ttlMs;
+    this.max = max;
+    this.now = now;
+    this.map = new Map();
+  }
+  get(key) {
+    const e = this.map.get(key);
+    if (!e) return undefined;
+    if (this.now() >= e.expires) {
+      this.map.delete(key);
+      return undefined;
+    }
+    this.map.delete(key);
+    this.map.set(key, e);
+    return e.value;
+  }
+  put(key, value) {
+    this.map.delete(key);
+    this.map.set(key, { value, expires: this.now() + this.ttlMs });
+    while (this.map.size > this.max) this.map.delete(this.map.keys().next().value);
+  }
+  get size() {
+    return this.map.size;
+  }
+}
+
+// Parse Retry-After (delta seconds or an HTTP date) into milliseconds, or null.
+export function retryAfterMs(value, now = Date.now()) {
+  if (value == null || value === "") return null;
+  const secs = Number(value);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : Math.max(0, at - now);
+}
+
 export class QlooClient {
   /**
    * @param {object} opts
    * @param {string} opts.apiKey   hackathon key, sent as X-Api-Key
    * @param {Function} [opts.fetch] fetch implementation (injectable for tests)
-   * @param {object} [opts.cache]  object with get(key) / put(key, value) promises
-   * @param {number} [opts.timeoutMs]
+   * @param {object} [opts.cache]  object with get(key) / put(key, value); see TtlCache
+   * @param {number} [opts.timeoutMs]    per-attempt timeout
+   * @param {number} [opts.maxAttempts]  attempts per request on 429, 5xx or network errors
+   * @param {number} [opts.maxTotalMs]   cap on total time per request, retries and waits included
+   * @param {number} [opts.baseDelayMs]  first backoff step; doubles each retry (full jitter)
+   * @param {number} [opts.maxDelayMs]   cap on a single backoff wait
    */
-  constructor({ apiKey, fetch: fetchImpl, cache, timeoutMs = 12000, baseUrl = QLOO_BASE }) {
+  constructor({
+    apiKey,
+    fetch: fetchImpl,
+    cache,
+    timeoutMs = 12000,
+    baseUrl = QLOO_BASE,
+    maxAttempts = 4,
+    maxTotalMs = 10000,
+    baseDelayMs = 300,
+    maxDelayMs = 4000,
+    sleep: sleepImpl = sleep,
+    random = Math.random,
+    now = Date.now,
+  }) {
     if (!apiKey) throw new Error("QLOO_API_KEY is not set");
     this.apiKey = apiKey;
     this.fetch = fetchImpl || globalThis.fetch.bind(globalThis);
     this.cache = cache || null;
     this.timeoutMs = timeoutMs;
     this.baseUrl = baseUrl;
+    this.maxAttempts = maxAttempts;
+    this.maxTotalMs = maxTotalMs;
+    this.baseDelayMs = baseDelayMs;
+    this.maxDelayMs = maxDelayMs;
+    this.sleep = sleepImpl;
+    this.random = random;
+    this.now = now;
     this.calls = 0;
+    this.stats = { calls: 0, cacheHits: 0, retries: 0, rateLimited: 0, serverErrors: 0, waitedMs: 0, gaveUp: 0 };
+  }
+
+  backoffMs(attempt) {
+    // Full jitter: a random wait between 0 and min(maxDelay, base * 2^attempt).
+    const ceiling = Math.min(this.maxDelayMs, this.baseDelayMs * 2 ** attempt);
+    return Math.round(this.random() * ceiling);
   }
 
   async get(path, params = {}) {
@@ -54,40 +126,58 @@ export class QlooClient {
     const url = `${this.baseUrl}${path}?${qs.toString()}`;
     if (this.cache) {
       const hit = await this.cache.get(url);
-      if (hit) return hit;
+      if (hit) {
+        this.stats.cacheHits++;
+        return hit;
+      }
     }
+    const started = this.now();
     let lastErr;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < this.maxAttempts; attempt++) {
+      const remaining = this.maxTotalMs - (this.now() - started);
+      if (remaining <= 0) break;
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
+      const timer = setTimeout(() => ctrl.abort(), Math.min(this.timeoutMs, remaining));
+      let res;
       try {
         this.calls++;
-        const res = await this.fetch(url, {
+        this.stats.calls++;
+        res = await this.fetch(url, {
           method: "GET",
           headers: { "X-Api-Key": this.apiKey, Accept: "application/json" },
           signal: ctrl.signal,
         });
-        if (res.status === 429 || res.status >= 500) {
-          lastErr = new QlooError(`Qloo ${res.status}`, res.status, path);
-          await sleep(400 * (attempt + 1));
-          continue;
-        }
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const msg = body?.error?.message || body?.message || `Qloo ${res.status}`;
-          throw new QlooError(msg, res.status, path);
-        }
-        if (this.cache) await this.cache.put(url, body);
-        return body;
       } catch (err) {
-        if (err instanceof QlooError) throw err;
-        lastErr = err;
-        await sleep(300 * (attempt + 1));
+        lastErr = err; // network error or timeout: retryable
       } finally {
         clearTimeout(timer);
       }
+      let hinted = null;
+      if (res) {
+        if (res.status === 429 || res.status >= 500) {
+          if (res.status === 429) this.stats.rateLimited++;
+          else this.stats.serverErrors++;
+          lastErr = new QlooError(`Qloo ${res.status}`, res.status, path);
+          hinted = retryAfterMs(res.headers?.get?.("retry-after"), this.now());
+        } else {
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const msg = body?.error?.message || body?.message || `Qloo ${res.status}`;
+            throw new QlooError(msg, res.status, path); // other 4xx: no retry, never cached
+          }
+          if (this.cache) await this.cache.put(url, body); // only successful responses are cached
+          return body;
+        }
+      }
+      if (attempt === this.maxAttempts - 1) break;
+      const wait = hinted != null ? hinted : this.backoffMs(attempt);
+      if (this.now() - started + wait > this.maxTotalMs) break; // would blow the time cap
+      this.stats.retries++;
+      this.stats.waitedMs += wait;
+      await this.sleep(wait);
     }
-    throw lastErr || new QlooError("Qloo request failed", 0, path);
+    this.stats.gaveUp++;
+    throw lastErr instanceof QlooError ? lastErr : new QlooError(lastErr ? `Qloo request failed: ${lastErr.message || lastErr}` : "Qloo request failed", lastErr?.status || 0, path);
   }
 
   /** Entity search by name. Returns a list of normalized entities. */
