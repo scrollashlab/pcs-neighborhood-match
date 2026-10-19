@@ -19,8 +19,8 @@ Fayetteville, near Fort Bragg, draw people with the same tastes.
    family's favorites. Cells are grouped into areas of about 5 km, ranked and shown on a map. Each
    area is labeled after places Qloo returns inside it, when it has any.
 2. **Your first week.** Restaurants, cafes and venues near the base that match the places the family
-   will miss, within their eating-out budget. Each one shows which favorite led to it, using Qloo's
-   explainability data.
+   will miss, within their eating-out budget. Where Qloo returns explainability data, each one shows
+   the favorite that led to it.
 3. **For the kids.** Family-friendly places, shown when the family has children.
 4. **Weekend trips.** Destinations within driving range that fit what the family enjoys.
 5. **Common ground.** Artists and shows that are popular locally and also fit the family's taste.
